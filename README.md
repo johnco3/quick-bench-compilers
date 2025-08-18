@@ -36,6 +36,5 @@ Manifests:
     vnd.docker.reference.digest: sha256:4faa6888d93c6bb8f7fb1692693d1de8ececd09bd3380deb5a7c0f08df36e3e1
     vnd.docker.reference.type:   attestation-manifest
     vnd.docker.reference.digest: sha256:4faa6888d93c6bb8f7fb1692693d1de8ececd09bd3380deb5a7c0f08df36e3e1
-```
     vnd.docker.reference.type:   attestation-manifest
 ```
