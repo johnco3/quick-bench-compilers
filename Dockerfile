@@ -112,12 +112,13 @@ RUN ln -sf /usr/local/gcc-15/bin/gcc-15 /usr/local/bin/gcc && \
 RUN useradd -m builder
 WORKDIR /home/builder
 
-# Copy all scripts from workspace
-COPY scripts/* /home/builder/scripts/
+# Copy all scripts from workspace to builder home folder
+COPY scripts/* /home/builder/
 
-# Ensure scripts are executable and LF-only
-RUN chmod +x /home/builder/scripts/* \
- && for f in /home/builder/scripts/*; do sed -i 's/\r$//' "$f"; done
+# Ensure required scripts are executable
+RUN for f in about-me annotate build prebuild run time-build; do \
+      chmod +x /home/builder/$f; \
+    done
 
 # Final checks
 RUN /usr/local/gcc-15/bin/gcc-15 --version && \
@@ -127,4 +128,5 @@ RUN /usr/local/gcc-15/bin/gcc-15 --version && \
     which vmtouch && (vmtouch 2>&1 | head -n 1 | grep -q vmtouch) && \
     echo "All mandatory tools verified - GCC 15.2 container ready for Quick Bench"
 
+# Switch to non-root user
 USER builder
