@@ -1,0 +1,2 @@
+#!/bin/bash
+./bench --benchmark_format=json --benchmark_out=/home/builder/bench.out

@@ -1,0 +1,8 @@
+-fcoroutines
+-fconcepts
+-fconcepts-ts
+-fmodules-ts
+-fchar8_t
+-fconsteval
+-fconstinit
+-fimplicit-move

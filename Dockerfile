@@ -64,9 +64,10 @@ RUN rm -rf /usr/local/gcc-15/share/man \
            /usr/local/gcc-15/share/info \
            /usr/local/gcc-15/share/locale
 
-# Range-v3 headers (as in your original)
+# Range-v3 headers
 RUN git clone --depth 1 --branch 0.3.0 https://github.com/ericniebler/range-v3.git /tmp/range-v3 && \
-    cp -r /tmp/range-v3/include/* /usr/local/gcc-15/include/ && \
+    mkdir -p /usr/local/include/range-v3 && \
+    cp -r /tmp/range-v3/include/* /usr/local/include/ && \
     rm -rf /tmp/range-v3
 
 # Build & install Google Benchmark from source
@@ -111,130 +112,12 @@ RUN ln -sf /usr/local/gcc-15/bin/gcc-15 /usr/local/bin/gcc && \
 RUN useradd -m builder
 WORKDIR /home/builder
 
-# --- Heredoc scripts (unchanged from your version) ---
-
-# build
-COPY <<'EOF' /home/builder/build
-#!/bin/bash
-$CXX "$@" bench-file.cpp -o bench -lbenchmark -lpthread
-EOF
-
-# run
-COPY <<'EOF' /home/builder/run
-#!/bin/bash
-./bench --benchmark_format=json --benchmark_out=/home/builder/bench.out
-EOF
-
-# time-build
-COPY <<'EOF' /home/builder/time-build
-#!/bin/bash
-set -e
-
-FILENAME=$1
-PARAMETERS="${@:2}"
-COUNTER=0
-SECONDS=0
-# default 60s timeout can be changed with an environment variable
-MAX_TIME="${BB_TIMEOUT:-60}"
-MAX_COUNTER="${BB_MAX:-20}"
-LAST_TIME=0
-MAX_DURATION=0
-
-# Generate a list of all used includes to display
-$CXX -H -fsyntax-only $PARAMETERS "$FILENAME" 2> bench.inc
-# Make a cleaned copy that can be used as input for vmtouch
-sed -r 's/\.+ //' bench.inc | xargs -r realpath > bench.cache
-echo "$1" >> bench.cache
-
-while [[ $COUNTER -lt $MAX_COUNTER && $SECONDS -lt $((MAX_TIME - MAX_DURATION)) ]]; do
-  # Make sure no include is in the cache before starting the build
-  vmtouch -eq $(< bench.cache) || true
-  script --flush --quiet --return output.txt --command "/usr/bin/time -o one-bench.out -f \"%U\\t%S\\t%M\\t%I\\t%O\\t%F\\t%R\" $CXX -c $PARAMETERS $FILENAME"
-  (( COUNTER=COUNTER+1 ))
-  if (( MAX_DURATION < SECONDS-LAST_TIME ))
-  then
-   (( MAX_DURATION = SECONDS-LAST_TIME ))  || true
-  fi
-  cat one-bench.out >> bench.out
-  (( LAST_TIME=SECONDS )) || true
-done
-EOF
-
-# prebuild
-COPY <<'EOF' /home/builder/prebuild
-#!/bin/bash
-set -e
-
-FILENAME=$1
-PREPROC=$2
-ASM=$3
-PARAMETERS="${@:4}"
-
-if [ $PREPROC = true ]; then
-    $CXX -E $PARAMETERS $FILENAME > bench.i
-fi
-
-if [ "$ASM" != "none" ]; then
-    $CXX -S -masm=$ASM -o bench.ss $PARAMETERS $FILENAME
-    # -S tries to remove the output instead of overwriting it.
-    # So instead we use a temp file then cp on the target, that will overwrite
-    cp bench.ss bench.s
-fi
-EOF
-
-# annotate
-COPY <<'EOF' /home/builder/annotate
-#!/bin/bash
-
-while read -r line ;
-do echo "----------- $line" >> bench.perf
-perf annotate "$@" --stdio $line >> bench.perf 2>/dev/null || echo "Could not annotate $line" >> bench.perf ;
-done <bench.func
-EOF
-
-# about-me
-COPY <<'EOF' /home/builder/about-me
-#!/bin/bash
-
-stty cols 200
-
-echo "[version]"
-echo "1"
-
-echo "[std]"
-g++ --help -v 2>/dev/null | grep -E "\-std=c\+\+(11|14|17|20|23|26|2c)" | grep -v "Deprecated" | grep -v "Same as" | grep -oE "c\+\+(11|14|17|20|23|26|2c)" | sort -u
-
-echo "[experimental]"
-g++ --help -v 2>/dev/null | ( grep -oFwf /home/builder/experimental-flags || [ "$?" == "1" ] )
-
-echo "[boost]"
-
-echo "[libs]"
-echo "gnu"
-
-echo "[flags]"
-echo "-ffast-math"
-echo "-fno-exceptions"
-echo "-fno-rtti"
-echo "-march=native"
-echo "-mtune=native"
-EOF
-
-# experimental-flags
-COPY <<'EOF' /home/builder/experimental-flags
--fcoroutines
--fconcepts
--fconcepts-ts
--fmodules-ts
--fchar8_t
--fconsteval
--fconstinit
--fimplicit-move
-EOF
+# Copy all scripts from workspace
+COPY scripts/* /home/builder/scripts/
 
 # Ensure scripts are executable and LF-only
-RUN chmod +x /home/builder/* \
- && for f in /home/builder/*; do sed -i 's/\r$//' "$f"; done
+RUN chmod +x /home/builder/scripts/* \
+ && for f in /home/builder/scripts/*; do sed -i 's/\r$//' "$f"; done
 
 # Final checks
 RUN /usr/local/gcc-15/bin/gcc-15 --version && \
@@ -245,4 +128,3 @@ RUN /usr/local/gcc-15/bin/gcc-15 --version && \
     echo "All mandatory tools verified - GCC 15.2 container ready for Quick Bench"
 
 USER builder
-

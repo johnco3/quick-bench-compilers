@@ -1,0 +1,6 @@
+#!/bin/bash
+
+while read -r line ;
+do echo "----------- $line" >> bench.perf
+perf annotate "$@" --stdio $line >> bench.perf 2>/dev/null || echo "Could not annotate $line" >> bench.perf ;
+done <bench.func

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+stty cols 200
+
+echo "[version]"
+echo "1"
+
+echo "[std]"
+g++ --help -v 2>/dev/null | grep -E "\-std=c\+\+(11|14|17|20|23|26|2c)" | grep -v "Deprecated" | grep -v "Same as" | grep -oE "c\+\+(11|14|17|20|23|26|2c)" | sort -u
+
+echo "[experimental]"
+g++ --help -v 2>/dev/null | ( grep -oFwf /home/builder/experimental-flags || [ "$?" == "1" ] )
+
+echo "[boost]"
+
+echo "[libs]"
+echo "gnu"
+
+echo "[flags]"
+echo "-ffast-math"
+echo "-fno-exceptions"
+echo "-fno-rtti"
+echo "-march=native"
+echo "-mtune=native"
