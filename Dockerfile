@@ -110,15 +110,20 @@ RUN ln -sf /usr/local/gcc-15/bin/gcc-15 /usr/local/bin/gcc && \
     ln -sf /usr/local/gcc-15/bin/g++-15 /usr/local/bin/g++
 
 RUN useradd -m builder
+RUN usermod -g users builder
+RUN chown builder:users \
+    /home/builder/.bash_logout \
+    /home/builder/.bashrc \
+    /home/builder/.profile
+
 WORKDIR /home/builder
 
-# Copy all scripts from workspace to builder home folder
 COPY scripts/* /home/builder/
 
-# Ensure required scripts are executable
 RUN for f in about-me annotate build prebuild run time-build; do \
       chmod +x /home/builder/$f; \
-    done
+    done && \
+    chmod -x /home/builder/experimental-flags
 
 # Final checks
 RUN /usr/local/gcc-15/bin/gcc-15 --version && \
