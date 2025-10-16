@@ -70,6 +70,15 @@ RUN git clone --depth 1 --branch 0.3.0 https://github.com/ericniebler/range-v3.g
     cp -r /tmp/range-v3/include/* /usr/local/include/ && \
     rm -rf /tmp/range-v3
 
+# Boost headers (header-only libraries)
+ARG BOOST_VERSION=1.89.0
+ARG BOOST_VERSION_UNDERSCORE=1_89_0
+
+RUN wget https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
+    tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
+    cp -r boost_${BOOST_VERSION_UNDERSCORE}/boost /usr/local/include/ && \
+    rm -rf boost_${BOOST_VERSION_UNDERSCORE}*
+
 # Build & install Google Benchmark from source
 WORKDIR /tmp
 RUN git clone --depth=1 https://github.com/google/benchmark.git && \
@@ -78,6 +87,9 @@ RUN git clone --depth=1 https://github.com/google/benchmark.git && \
     cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && \
     ninja && ninja install && \
     rm -rf /tmp/benchmark
+
+# Final Stage 1 cleanup - remove build artifacts
+RUN rm -rf /tmp/gcc-source /tmp/gcc-build
 
 ############### Stage 2: Runtime ###############
 FROM ubuntu:25.04
@@ -121,7 +133,7 @@ WORKDIR /home/builder
 COPY scripts/* /home/builder/
 
 RUN for f in about-me annotate build prebuild run time-build; do \
-      chmod +x /home/builder/$f; \
+    chmod +x /home/builder/$f; \
     done && \
     chmod -x /home/builder/experimental-flags
 
