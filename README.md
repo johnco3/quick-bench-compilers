@@ -4,8 +4,9 @@ Custom Dockerfiles and build scripts for Quick Bench compilers.
 - Extends [`bench-runner`](https://github.com/FredTingaud/bench-runner)
 - Supports experimental GCC, Clang, and other toolchains
 - use the following docker command to build the image
-  ```bash
-  docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-15.2 -t johnco3/quick-bench:latest --push .```
+```bash
+  docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-15.2 -t johnco3/quick-bench:latest --push .
+```
 - the following command inspects the published docker tag
 ```bash
 >docker buildx imagetools inspect johnco3/quick-bench:latest

@@ -61,8 +61,8 @@ RUN make -j$(nproc) && make install
 
 RUN find /usr/local/gcc-15 -type f -executable -exec strip {} + 2>/dev/null || true
 RUN rm -rf /usr/local/gcc-15/share/man \
-           /usr/local/gcc-15/share/info \
-           /usr/local/gcc-15/share/locale
+    /usr/local/gcc-15/share/info \
+    /usr/local/gcc-15/share/locale
 
 # Range-v3 headers
 RUN git clone --depth 1 --branch 0.3.0 https://github.com/ericniebler/range-v3.git /tmp/range-v3 && \
@@ -70,23 +70,48 @@ RUN git clone --depth 1 --branch 0.3.0 https://github.com/ericniebler/range-v3.g
     cp -r /tmp/range-v3/include/* /usr/local/include/ && \
     rm -rf /tmp/range-v3
 
-# Boost headers (header-only libraries)
+# Build & install {fmt} as a compiled library
+RUN git clone --depth 1 --branch 11.0.2 https://github.com/fmtlib/fmt.git /tmp/fmt && \
+    mkdir -p /tmp/fmt/build && cd /tmp/fmt/build && \
+    cmake -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DFMT_TEST=OFF \
+    -DCMAKE_CXX_COMPILER=/usr/local/gcc-15/bin/g++-15 \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
+    ninja && ninja install && \
+    rm -rf /tmp/fmt
+
+# Build & install Google Benchmark (Tests Disabled to avoid GCC 15 ICE)
+WORKDIR /tmp
+RUN git clone --depth=1 https://github.com/google/benchmark.git && \
+    mkdir -p benchmark/build && cd benchmark/build && \
+    cmake -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+    -DCMAKE_CXX_FLAGS="-fPIC" .. && \
+    ninja && ninja install && \
+    rm -rf /tmp/benchmark
+
+# Build and install Boost (Compiled Libraries)
 ARG BOOST_VERSION=1.89.0
 ARG BOOST_VERSION_UNDERSCORE=1_89_0
 
 RUN wget https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
     tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
-    cp -r boost_${BOOST_VERSION_UNDERSCORE}/boost /usr/local/include/ && \
+    cd boost_${BOOST_VERSION_UNDERSCORE} && \
+    ./bootstrap.sh --prefix=/usr/local && \
+    ./b2 install \
+    --with-system \
+    --with-filesystem \
+    --with-program_options \
+    --with-regex \
+    toolset=gcc \
+    variant=release \
+    link=static \
+    threading=multi \
+    cxxflags="-fPIC" && \
+    cd .. && \
     rm -rf boost_${BOOST_VERSION_UNDERSCORE}*
-
-# Build & install Google Benchmark from source
-WORKDIR /tmp
-RUN git clone --depth=1 https://github.com/google/benchmark.git && \
-    git clone --depth=1 https://github.com/google/googletest.git benchmark/googletest && \
-    mkdir -p benchmark/build && cd benchmark/build && \
-    cmake -GNinja -DCMAKE_BUILD_TYPE=Release .. && \
-    ninja && ninja install && \
-    rm -rf /tmp/benchmark
 
 # Final Stage 1 cleanup - remove build artifacts
 RUN rm -rf /tmp/gcc-source /tmp/gcc-build

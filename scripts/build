@@ -1,2 +1,9 @@
 #!/bin/bash
-$CXX "$@" bench-file.cpp -o bench -lbenchmark -lpthread
+$CXX "$@" bench-file.cpp -o bench \
+    -lfmt \
+    -lboost_regex \
+    -lboost_filesystem \
+    -lboost_atomic \
+    -lbenchmark \
+    -lpthread \
+    -lrt
