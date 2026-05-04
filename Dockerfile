@@ -1,174 +1,133 @@
 # syntax=docker/dockerfile:1.4
 
-############### Stage 1: Build GCC ###############
-FROM ubuntu:25.04 AS builder
-
+############### Stage 1: Build GCC & Libs ###############
+# Using ubuntu:25.10 (bare tag) until 26.04 has CVEs resolved.
+# The bare tag resolves to the current multi-arch manifest list, so
+# linux/amd64 and linux/arm64 builds both work without manual digest pinning.
+FROM ubuntu:25.10 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    build-essential \
-    wget \
-    curl \
-    git \
-    cmake \
-    flex \
-    bison \
-    libgmp-dev \
-    libmpfr-dev \
-    libmpc-dev \
-    libisl-dev \
-    zlib1g-dev \
-    libzstd-dev \
-    python3 \
-    ninja-build \
-    xz-utils \
-    bzip2 \
-    && rm -rf /var/lib/apt/lists/*
+# 1. Version Tracking & Metadata
+# Stored under /opt so the apt cleanup below doesn't wipe it (rm -rf /tmp/*).
+ADD https://api.github.com/repos/johnco3/quick-bench-back-end/git/refs/heads/main /opt/backend-version.json
 
-ARG GCC_VERSION=15.2.0
+# 2. Build Dependencies
+# apt-get -y upgrade pulls in security fixes published since the base image
+# was last rebuilt, so we stay current without re-pinning.
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends \
+       build-essential ca-certificates wget curl git cmake ninja-build \
+       python3 zlib1g-dev xz-utils bzip2 file \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# --- UPDATED TO GCC 16.1 ---
+ARG GCC_VERSION=16.1.0
+
+# 3. Build GCC 16.1
 WORKDIR /tmp
 RUN wget https://gcc.gnu.org/pub/gcc/releases/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz && \
     tar -xf gcc-${GCC_VERSION}.tar.xz && \
     mv gcc-${GCC_VERSION} gcc-source && \
-    rm gcc-${GCC_VERSION}.tar.xz
-
-WORKDIR /tmp/gcc-source
-RUN ./contrib/download_prerequisites
+    cd gcc-source && ./contrib/download_prerequisites
 
 WORKDIR /tmp/gcc-build
 RUN /tmp/gcc-source/configure \
-    --prefix=/usr/local/gcc-15 \
+    --prefix=/usr/local/gcc-16 \
     --enable-languages=c,c++ \
     --disable-multilib \
     --enable-threads=posix \
     --enable-shared \
     --disable-static \
-    --enable-__cxa_atexit \
-    --enable-clocale=gnu \
-    --enable-gnu-unique-object \
-    --enable-linker-build-id \
-    --enable-lto \
-    --enable-plugin \
-    --disable-werror \
-    --enable-checking=release \
-    --with-system-zlib \
-    --program-suffix=-15
+    --program-suffix=-16 && \
+    make -j$(nproc) && make install
 
-RUN make -j$(nproc) && make install
+# 4. Static Library Builds
+# Ada-URL
+RUN git clone --depth 1 https://github.com/ada-url/ada.git /tmp/ada && \
+    cmake -S /tmp/ada -B /tmp/ada/build -GNinja -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF -DCMAKE_CXX_COMPILER=/usr/local/gcc-16/bin/g++-16 \
+    -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
+    ninja -C /tmp/ada/build install
 
-RUN find /usr/local/gcc-15 -type f -executable -exec strip {} + 2>/dev/null || true
-RUN rm -rf /usr/local/gcc-15/share/man \
-    /usr/local/gcc-15/share/info \
-    /usr/local/gcc-15/share/locale
-
-# Range-v3 headers
-RUN git clone --depth 1 --branch 0.3.0 https://github.com/ericniebler/range-v3.git /tmp/range-v3 && \
-    mkdir -p /usr/local/include/range-v3 && \
-    cp -r /tmp/range-v3/include/* /usr/local/include/ && \
-    rm -rf /tmp/range-v3
-
-# Build & install {fmt} as a compiled library
-RUN git clone --depth 1 --branch 11.0.2 https://github.com/fmtlib/fmt.git /tmp/fmt && \
-    mkdir -p /tmp/fmt/build && cd /tmp/fmt/build && \
-    cmake -GNinja \
+# Google Benchmark
+RUN git clone --depth 1 https://github.com/google/benchmark.git /tmp/benchmark && \
+    cmake -S /tmp/benchmark -B /tmp/benchmark/build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DFMT_TEST=OFF \
-    -DCMAKE_CXX_COMPILER=/usr/local/gcc-15/bin/g++-15 \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON .. && \
-    ninja && ninja install && \
-    rm -rf /tmp/fmt
-
-# Build & install Google Benchmark (Tests Disabled to avoid GCC 15 ICE)
-WORKDIR /tmp
-RUN git clone --depth=1 https://github.com/google/benchmark.git && \
-    mkdir -p benchmark/build && cd benchmark/build && \
-    cmake -GNinja \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DBENCHMARK_ENABLE_TESTING=OFF \
     -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
-    -DCMAKE_CXX_FLAGS="-fPIC" .. && \
-    ninja && ninja install && \
+    -DBENCHMARK_USE_BUNDLED_GTEST=OFF \
+    -DCMAKE_CXX_COMPILER=/usr/local/gcc-16/bin/g++-16 \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
+    ninja -C /tmp/benchmark/build install && \
     rm -rf /tmp/benchmark
 
-# Build and install Boost (Compiled Libraries)
-ARG BOOST_VERSION=1.89.0
-ARG BOOST_VERSION_UNDERSCORE=1_89_0
-
-RUN wget https://archives.boost.io/release/${BOOST_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
+# Boost (using 1.87+ is recommended for GCC 16, but keeping your 1.91 request)
+ARG BOOST_VERSION_UNDERSCORE=1_91_0
+RUN wget https://archives.boost.io/release/1.91.0/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
     tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
-    cd boost_${BOOST_VERSION_UNDERSCORE} && \
-    ./bootstrap.sh --prefix=/usr/local && \
-    ./b2 install \
-    --with-system \
-    --with-filesystem \
-    --with-program_options \
-    --with-regex \
-    toolset=gcc \
-    variant=release \
-    link=static \
-    threading=multi \
-    cxxflags="-fPIC" && \
-    cd .. && \
-    rm -rf boost_${BOOST_VERSION_UNDERSCORE}*
+    cd boost_${BOOST_VERSION_UNDERSCORE} && ./bootstrap.sh --prefix=/usr/local && \
+    ./b2 install --with-filesystem --with-regex --with-program_options \
+    toolset=gcc variant=release link=static threading=multi cxxflags="-fPIC"
 
-# Final Stage 1 cleanup - remove build artifacts
-RUN rm -rf /tmp/gcc-source /tmp/gcc-build
+# Glaze (Header-Only)
+RUN git clone --depth 1 https://github.com/stephenberry/glaze.git /tmp/glaze && \
+    cp -r /tmp/glaze/include/glaze /usr/local/include/
 
-############### Stage 2: Runtime ###############
-FROM ubuntu:25.04
+############### Stage 2: Final Runtime ###############
+FROM ubuntu:25.10
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Install runtime packages (minimal; no nodejs, no docker)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    binutils \
-    libc6-dev \
-    linux-libc-dev \
-    linux-perf \
-    linux-tools-generic \
-    linux-tools-common \
-    time \
-    util-linux \
-    vmtouch \
-    && rm -rf /var/lib/apt/lists/*
+# 1. Install Runtime & Development headers
+# Same upgrade-then-install pattern as the builder stage.
+RUN apt-get update \
+    && apt-get -y upgrade \
+    && apt-get install -y --no-install-recommends \
+       dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
+       ca-certificates curl procmail git libjemalloc-dev rapidjson-dev \
+       linux-perf linux-tools-generic \
+       librange-v3-dev libssl-dev libsnappy-dev libhiredis-dev libyaml-cpp-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/local/gcc-15 /usr/local/gcc-15
+# 2. Copy toolchain and artifacts
+COPY --from=builder /usr/local/gcc-16 /usr/local/gcc-16
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
+COPY --from=builder /opt/backend-version.json /opt/backend-version.json
 
-ENV PATH="/usr/local/gcc-15/bin:/usr/local/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/local/gcc-15/lib64:/usr/local/lib:/usr/local/gcc-15/lib"
-ENV CC="/usr/local/gcc-15/bin/gcc-15"
-ENV CXX="/usr/local/gcc-15/bin/g++-15"
+# 3. Environment & Linker Configuration
+ENV PATH="/usr/local/gcc-16/bin:/usr/local/bin:${PATH}"
+ENV CC="gcc-16"
+ENV CXX="g++-16"
+# Note: GCC 16 stores libs in lib64 on x86_64 Ubuntu
+ENV LD_LIBRARY_PATH="/usr/local/gcc-16/lib64:/usr/local/lib"
+RUN ldconfig
 
-RUN ln -sf /usr/local/gcc-15/bin/gcc-15 /usr/local/bin/gcc && \
-    ln -sf /usr/local/gcc-15/bin/g++-15 /usr/local/bin/g++
+# Set global aliases so 'gcc' calls 'gcc-16'
+RUN ln -sf /usr/local/gcc-16/bin/gcc-16 /usr/local/bin/gcc && \
+    ln -sf /usr/local/gcc-16/bin/g++-16 /usr/local/bin/g++
 
-RUN useradd -m builder
-RUN usermod -g users builder
-RUN chown builder:users \
-    /home/builder/.bash_logout \
-    /home/builder/.bashrc \
-    /home/builder/.profile
-
+# 4. User Setup
+RUN useradd -m builder && usermod -g users builder
 WORKDIR /home/builder
 
+# 5. Copy and assign permissions to scripts
 COPY scripts/* /home/builder/
 
-RUN for f in about-me annotate build prebuild run time-build; do \
-    chmod +x /home/builder/$f; \
+RUN for f in about-me annotate build prebuild run time-build verify-build.sh; do \
+    if [ -f "/home/builder/$f" ]; then \
+    chmod +x "/home/builder/$f"; \
+    else \
+    echo "Error: Script $f missing"; exit 1; \
+    fi; \
     done && \
-    chmod -x /home/builder/experimental-flags
+    chmod -x /home/builder/experimental-flags && \
+    chown -R builder:users /home/builder
 
-# Final checks
-RUN /usr/local/gcc-15/bin/gcc-15 --version && \
-    /usr/local/gcc-15/bin/g++-15 --version && \
-    echo "Built for architecture: $(uname -m)" && \
-    which perf && perf --version || true && \
-    which vmtouch && (vmtouch 2>&1 | head -n 1 | grep -q vmtouch) && \
-    echo "All mandatory tools verified - GCC 15.2 container ready for Quick Bench"
+# 6. Quality Assurance
+RUN /home/builder/verify-build.sh
 
-# Switch to non-root user
 USER builder

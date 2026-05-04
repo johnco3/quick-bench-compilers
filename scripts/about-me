@@ -9,7 +9,10 @@ echo "[std]"
 g++ --help -v 2>/dev/null | grep -E "\-std=c\+\+(11|14|17|20|23|26|2c)" | grep -v "Deprecated" | grep -v "Same as" | grep -oE "c\+\+(11|14|17|20|23|26|2c)" | sort -u
 
 echo "[experimental]"
-g++ --help -v 2>/dev/null | ( grep -oFwf /home/builder/experimental-flags || [ "$?" == "1" ] )
+# Dedupe: g++ --help -v can mention the same flag many times (e.g. -fmodules
+# appears in summaries for -fmodules, -fmodules-ts, -fno-modules, etc.),
+# which would otherwise produce N copies of the same option in the UI.
+g++ --help -v 2>/dev/null | ( grep -oFwf /home/builder/experimental-flags || [ "$?" == "1" ] ) | sort -u
 
 echo "[boost]"
 
