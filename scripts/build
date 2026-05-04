@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # Always-on flags for GCC 16.1
-# -O3:           Maximum optimization
 # -march=native: Optimize for the current CPU instructions (AVX2/NEON)
-# -std=c++26:    Enable C++26 language features (default in GCC 16 is gnu++20)
 #
-# Opt-in flags such as -flto=auto and -freflection live in experimental-flags
-# and are passed in via "$@" when the user selects them in the UI.
-OPT_FLAGS="-O3 -march=native -std=c++26 -freflection"
+# Opt-in flags such as -fmodules, -flto and -freflection live in
+# experimental-flags and are passed in via "$@" only when the user
+# checks them in the UI.
+OPT_FLAGS="-march=native"
 
 $CXX $OPT_FLAGS "$@" bench-file.cpp -o bench \
     -lada \
