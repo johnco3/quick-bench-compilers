@@ -7,6 +7,15 @@ Custom Dockerfiles and build scripts for Quick Bench compilers.
 ```bash
   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-15.2 -t johnco3/quick-bench:latest --push .
 ```
+- build a lean general-purpose GCC image (no quick-bench extra libraries/scripts)
+```bash
+  docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.lean -t johnco3/quick-bench:gcc-16.1-lean --push .
+```
+- if you already built locally with `docker build`, retag and push
+```bash
+  docker tag quick-bench:gcc-16.1-local johnco3/quick-bench:gcc-16.1
+  docker push johnco3/quick-bench:gcc-16.1
+```
 - the following command inspects the published docker tag
 ```bash
 >docker buildx imagetools inspect johnco3/quick-bench:latest

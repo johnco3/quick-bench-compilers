@@ -86,6 +86,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
+    cmake ninja-build \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
        ca-certificates curl procmail git libjemalloc-dev rapidjson-dev \
        linux-perf linux-tools-generic \
@@ -111,7 +112,7 @@ RUN ln -sf /usr/local/gcc-16/bin/gcc-16 /usr/local/bin/gcc && \
     ln -sf /usr/local/gcc-16/bin/g++-16 /usr/local/bin/g++
 
 # 4. User Setup
-RUN useradd -m builder && usermod -g users builder
+RUN useradd -m -s /bin/bash builder
 WORKDIR /home/builder
 
 # 5. Copy and assign permissions to scripts
@@ -125,9 +126,13 @@ RUN for f in about-me annotate build prebuild run time-build verify-build.sh; do
     fi; \
     done && \
     chmod -x /home/builder/experimental-flags && \
-    chown -R builder:users /home/builder
+    chown -R builder:builder /home/builder
 
 # 6. Quality Assurance
+USER builder
 RUN /home/builder/verify-build.sh
 
-USER builder
+# Keep a non-root default, but allow overrides at build time:
+# docker build --build-arg DEFAULT_USER=root ...
+ARG DEFAULT_USER=builder
+USER ${DEFAULT_USER}
