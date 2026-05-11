@@ -32,6 +32,8 @@ RUN wget https://gcc.gnu.org/pub/gcc/releases/gcc-${GCC_VERSION}/gcc-${GCC_VERSI
     cd gcc-source && ./contrib/download_prerequisites
 
 WORKDIR /tmp/gcc-build
+# Keep configure/build/install in separate layers so cache can be reused
+# across minor downstream changes (e.g. script edits in the final stage).
 RUN /tmp/gcc-source/configure \
     --prefix=/usr/local/gcc-16 \
     --enable-languages=c,c++ \
@@ -39,8 +41,11 @@ RUN /tmp/gcc-source/configure \
     --enable-threads=posix \
     --enable-shared \
     --disable-static \
-    --program-suffix=-16 && \
-    make -j$(nproc) && make install
+    --program-suffix=-16
+
+RUN make -j$(nproc)
+
+RUN make install
 
 # 4. Static Library Builds
 # Ada-URL
