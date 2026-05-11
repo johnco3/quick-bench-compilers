@@ -3,49 +3,82 @@
 Custom Dockerfiles and build scripts for Quick Bench compilers.
 - Extends [`bench-runner`](https://github.com/FredTingaud/bench-runner)
 - Supports experimental GCC, Clang, and other toolchains
-- use the following docker command to build the image
+
+## Build Workflow (Buildx + qb builder)
+
+This project is intended to be built as a multi-arch image (`linux/amd64` + `linux/arm64`).
+
+### 1. One-time setup per machine (Windows PC and macOS)
+
+Run on each machine once:
+
 ```bash
-  docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-15.2 -t johnco3/quick-bench:latest --push .
+docker login
+docker buildx create --name qb --driver docker-container --use
+docker buildx inspect --bootstrap
+docker buildx ls
 ```
-- build a lean general-purpose GCC image (no quick-bench extra libraries/scripts)
+
+You should see `qb*` as the active builder.  If it is present the --builder qb is optional.
+
+### 2. Preferred default: local cache only (no extra registry cache traffic)
+
+Use this command for normal release pushes:
+
 ```bash
-  docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.lean -t johnco3/quick-bench:gcc-16.1-lean --push .
+docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --build-arg NPROC=16 --push .
 ```
-- if you already built locally with `docker build`, retag and push
+
+Notes:
+- Reusing the same `qb` builder preserves local BuildKit cache on that machine.
+- On Apple Silicon Macs, arm64 build steps run natively and are typically much faster.
+
+### 3. Optional: shared registry cache across machines
+
+Use this only when you want cache reuse between machines (for example Windows -> Mac):
+
+First run (seed cache):
+
 ```bash
-  docker tag quick-bench:gcc-16.1-local johnco3/quick-bench:gcc-16.1
-  docker push johnco3/quick-bench:gcc-16.1
+docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --push .
 ```
-- the following command inspects the published docker tag
+
+Later runs (reuse + refresh cache):
+
 ```bash
->docker buildx imagetools inspect johnco3/quick-bench:latest
-
-Name:      docker.io/johnco3/quick-bench:latest
-MediaType: application/vnd.oci.image.index.v1+json
-Digest:    sha256:8fac2ce77a99507f4c7737775697c45f73432728477aa17fe79506dddb85cab7
-
-Manifests:
-  Name:        docker.io/johnco3/quick-bench:latest@sha256:7731714eb062037fcb4552b2c4c55a320923f25a77fcda8c87908fc99ce0daa8
-  MediaType:   application/vnd.oci.image.manifest.v1+json
-  Platform:    linux/amd64
-
-  Name:        docker.io/johnco3/quick-bench:latest@sha256:4faa6888d93c6bb8f7fb1692693d1de8ececd09bd3380deb5a7c0f08df36e3e1
-  MediaType:   application/vnd.oci.image.manifest.v1+json
-  Platform:    linux/arm64
-
-  Name:        docker.io/johnco3/quick-bench:latest@sha256:4f11299f0aae3bc16d700d2eda7c89df67480a178a11d7397f68d58d5847e8ff
-  MediaType:   application/vnd.oci.image.manifest.v1+json
-  Platform:    unknown/unknown
-  Annotations:
-    vnd.docker.reference.digest: sha256:7731714eb062037fcb4552b2c4c55a320923f25a77fcda8c87908fc99ce0daa8
-    vnd.docker.reference.type:   attestation-manifest
-
-  Name:        docker.io/johnco3/quick-bench:latest@sha256:71c017491e39580c68917e64f4959bf3a37debc8e1b3aeca0415b9b68a9cc327
-  MediaType:   application/vnd.oci.image.manifest.v1+json
-  Platform:    unknown/unknown
-  Annotations:
-    vnd.docker.reference.digest: sha256:4faa6888d93c6bb8f7fb1692693d1de8ececd09bd3380deb5a7c0f08df36e3e1
-    vnd.docker.reference.type:   attestation-manifest
-    vnd.docker.reference.digest: sha256:4faa6888d93c6bb8f7fb1692693d1de8ececd09bd3380deb5a7c0f08df36e3e1
-    vnd.docker.reference.type:   attestation-manifest
+docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --cache-from type=registry,ref=johnco3/quick-bench:buildcache --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --push .
 ```
+
+If the first run shows `ERROR importing cache manifest ... buildcache`, this is expected before cache is seeded. The build can still complete and seed cache via `--cache-to`.
+
+### 4. Quick local test build before multi-arch push
+
+Use this to validate Dockerfile changes quickly:
+
+```bash
+docker buildx build --builder qb --platform linux/amd64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1-local --build-arg NPROC=16 --load .
+```
+
+### 5. Verify that Docker Hub contains both architectures
+
+```bash
+docker buildx imagetools inspect johnco3/quick-bench:gcc-16.1
+```
+
+Look for:
+- `Platform: linux/amd64`
+- `Platform: linux/arm64`
+
+`unknown/unknown` entries are attestation manifests and are expected.
+
+### 6. Retag and push from an existing local image
+
+```bash
+docker tag johnco3/quick-bench:gcc-16.1-local johnco3/quick-bench:gcc-16.1
+docker push johnco3/quick-bench:gcc-16.1
+```
+
+### 7. Cache hygiene
+
+- Avoid `docker builder prune` unless disk pressure requires it.
+- Pruning clears local cache and can force long rebuilds.

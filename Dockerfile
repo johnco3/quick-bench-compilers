@@ -23,6 +23,8 @@ RUN apt-get update \
 
 # --- UPDATED TO GCC 16.1 ---
 ARG GCC_VERSION=16.1.0
+# Optional override for parallel build jobs, e.g. --build-arg NPROC=16
+ARG NPROC
 
 # 3. Build GCC 16.1
 WORKDIR /tmp
@@ -43,9 +45,10 @@ RUN /tmp/gcc-source/configure \
     --disable-static \
     --program-suffix=-16
 
-RUN make -j$(nproc)
+RUN make -j${NPROC:-$(nproc)}
 
-RUN make install
+# Install stripped binaries/libs to reduce final image size.
+RUN make install-strip
 
 # 4. Static Library Builds
 # Ada-URL
