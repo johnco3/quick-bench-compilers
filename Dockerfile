@@ -104,6 +104,7 @@ RUN apt-get update \
     cmake ninja-build gdb vim jq \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
        ca-certificates curl procmail git libjemalloc-dev rapidjson-dev \
+       liblog4cplus-dev libspdlog-dev \
        linux-perf linux-tools-generic \
        librange-v3-dev libssl-dev libsnappy-dev libhiredis-dev libyaml-cpp-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
