@@ -101,7 +101,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
-    cmake ninja-build \
+    cmake ninja-build gdb vim jq \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
        ca-certificates curl procmail git libjemalloc-dev rapidjson-dev \
        linux-perf linux-tools-generic \
