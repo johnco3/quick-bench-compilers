@@ -48,7 +48,14 @@ RUN /tmp/gcc-source/configure \
 RUN make -j${NPROC:-$(nproc)}
 
 # Install stripped binaries/libs to reduce final image size.
-RUN make install-strip
+# make install-strip only strips the driver binaries (gcc-16, g++-16).
+# The large internal executables in libexec/ (cc1, cc1plus, lto1) must be
+# stripped explicitly; this alone saves ~500-800 MB from the final image.
+RUN make install-strip \
+    && find /usr/local/gcc-16 -type f \
+       \( -name "cc1" -o -name "cc1plus" -o -name "lto1" -o -name "lto-wrapper" \
+          -o -name "collect2" -o -name "f951" \) \
+       -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # 4. Static Library Builds
 # Ada-URL
