@@ -7,10 +7,6 @@
 FROM ubuntu:25.10 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
-# 1. Version Tracking & Metadata
-# Stored under /opt so the apt cleanup below doesn't wipe it (rm -rf /tmp/*).
-ADD https://api.github.com/repos/johnco3/quick-bench-back-end/git/refs/heads/main /opt/backend-version.json
-
 # 2. Build Dependencies
 # apt-get -y upgrade pulls in security fixes published since the base image
 # was last rebuilt, so we stay current without re-pinning.
@@ -58,6 +54,25 @@ RUN make install-strip \
        -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # 4. Static Library Builds
+# Keep pinned tarball builds before moving git HEAD clones to maximize cache reuse.
+# jemalloc (Pinned to latest stable release requested)
+ARG JEMALLOC_VERSION=5.3.1
+RUN wget https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSION}/jemalloc-${JEMALLOC_VERSION}.tar.bz2 && \
+    tar -xf jemalloc-${JEMALLOC_VERSION}.tar.bz2 && \
+    cd jemalloc-${JEMALLOC_VERSION} && \
+    ./configure --prefix=/usr/local && \
+    make -j${NPROC:-$(nproc)} && \
+    make install && \
+    rm -rf /tmp/jemalloc-${JEMALLOC_VERSION} /tmp/jemalloc-${JEMALLOC_VERSION}.tar.bz2
+
+# Boost (using 1.87+ is recommended for GCC 16, but keeping your 1.91 request)
+ARG BOOST_VERSION_UNDERSCORE=1_91_0
+RUN wget https://archives.boost.io/release/1.91.0/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
+    tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
+    cd boost_${BOOST_VERSION_UNDERSCORE} && ./bootstrap.sh --prefix=/usr/local && \
+    ./b2 install --with-filesystem --with-regex --with-program_options \
+    toolset=gcc variant=release link=static threading=multi cxxflags="-fPIC"
+
 # Ada-URL
 RUN git clone --depth 1 https://github.com/ada-url/ada.git /tmp/ada && \
     cmake -S /tmp/ada -B /tmp/ada/build -GNinja -DCMAKE_BUILD_TYPE=Release \
@@ -79,14 +94,6 @@ RUN git clone --depth 1 https://github.com/google/benchmark.git /tmp/benchmark &
     ninja -C /tmp/benchmark/build install && \
     rm -rf /tmp/benchmark
 
-# Boost (using 1.87+ is recommended for GCC 16, but keeping your 1.91 request)
-ARG BOOST_VERSION_UNDERSCORE=1_91_0
-RUN wget https://archives.boost.io/release/1.91.0/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
-    tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
-    cd boost_${BOOST_VERSION_UNDERSCORE} && ./bootstrap.sh --prefix=/usr/local && \
-    ./b2 install --with-filesystem --with-regex --with-program_options \
-    toolset=gcc variant=release link=static threading=multi cxxflags="-fPIC"
-
 # Glaze (Header-Only)
 RUN git clone --depth 1 https://github.com/stephenberry/glaze.git /tmp/glaze && \
     cp -r /tmp/glaze/include/glaze /usr/local/include/
@@ -103,19 +110,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     cmake ninja-build gdb vim jq \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
-       ca-certificates curl procmail git libjemalloc-dev rapidjson-dev \
+         ca-certificates curl procmail git rapidjson-dev \
        liblog4cplus-dev libspdlog-dev \
        linux-perf linux-tools-generic \
        librange-v3-dev libssl-dev libsnappy-dev libhiredis-dev libyaml-cpp-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 2. Copy toolchain and artifacts
+# 2. Version Tracking & Metadata
+ADD https://api.github.com/repos/johnco3/quick-bench-back-end/git/refs/heads/main /opt/backend-version.json
+
+# 3. Copy toolchain and artifacts
 COPY --from=builder /usr/local/gcc-16 /usr/local/gcc-16
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
-COPY --from=builder /opt/backend-version.json /opt/backend-version.json
+COPY --from=builder /usr/local/bin/jemalloc-config /usr/local/bin/jemalloc-config
 
-# 3. Environment & Linker Configuration
+# 4. Environment & Linker Configuration
 ENV PATH="/usr/local/gcc-16/bin:/usr/local/bin:${PATH}"
 ENV CC="gcc-16"
 ENV CXX="g++-16"
@@ -127,11 +137,11 @@ RUN ldconfig
 RUN ln -sf /usr/local/gcc-16/bin/gcc-16 /usr/local/bin/gcc && \
     ln -sf /usr/local/gcc-16/bin/g++-16 /usr/local/bin/g++
 
-# 4. User Setup
+# 5. User Setup
 RUN useradd -m -s /bin/bash builder
 WORKDIR /home/builder
 
-# 5. Copy and assign permissions to scripts
+# 6. Copy and assign permissions to scripts
 COPY scripts/* /home/builder/
 
 RUN for f in about-me annotate build prebuild run time-build verify-build.sh; do \
@@ -144,7 +154,7 @@ RUN for f in about-me annotate build prebuild run time-build verify-build.sh; do
     chmod -x /home/builder/experimental-flags && \
     chown -R builder:builder /home/builder
 
-# 6. Quality Assurance
+# 7. Quality Assurance
 USER builder
 RUN /home/builder/verify-build.sh
 
