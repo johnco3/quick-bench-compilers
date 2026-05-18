@@ -4,6 +4,18 @@ Custom Dockerfiles and build scripts for Quick Bench compilers.
 - Extends [`bench-runner`](https://github.com/FredTingaud/bench-runner)
 - Supports experimental GCC, Clang, and other toolchains
 
+## Bundled Third-Party Libraries
+
+The image bundles a set of commonly used third-party libraries in `/usr/local`, including:
+
+- Boost (filesystem, regex, program_options)
+- jemalloc
+- Ada URL
+- Google Benchmark
+- Abseil
+- ankerl::unordered_dense
+- Glaze
+
 ## Build Workflow (buildx + named builder)
 
 This project is intended to be built as a multi-arch image (`linux/amd64` + `linux/arm64`).

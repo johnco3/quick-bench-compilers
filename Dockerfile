@@ -94,6 +94,24 @@ RUN git clone --depth 1 https://github.com/google/benchmark.git /tmp/benchmark &
     ninja -C /tmp/benchmark/build install && \
     rm -rf /tmp/benchmark
 
+# Abseil
+RUN git clone --depth 1 https://github.com/abseil/abseil-cpp.git /tmp/abseil-cpp && \
+    cmake -S /tmp/abseil-cpp -B /tmp/abseil-cpp/build -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DABSL_BUILD_TESTING=OFF \
+    -DABSL_PROPAGATE_CXX_STD=ON \
+    -DCMAKE_CXX_COMPILER=/usr/local/gcc-16/bin/g++-16 \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
+    ninja -C /tmp/abseil-cpp/build install && \
+    rm -rf /tmp/abseil-cpp
+
+# ankerl::unordered_dense (Header-Only)
+RUN git clone --depth 1 https://github.com/martinus/unordered_dense.git /tmp/unordered_dense && \
+    cp -r /tmp/unordered_dense/include/ankerl /usr/local/include/ && \
+    rm -rf /tmp/unordered_dense
+
 # Glaze (Header-Only)
 RUN git clone --depth 1 https://github.com/stephenberry/glaze.git /tmp/glaze && \
     cp -r /tmp/glaze/include/glaze /usr/local/include/

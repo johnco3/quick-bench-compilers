@@ -12,12 +12,12 @@ ninja --version >/dev/null 2>&1 || { echo "❌ ninja not found"; exit 1; }
 
 # 2. Check libraries
 # These paths remain the same as they are installed to /usr/local/lib
-for lib in libboost_filesystem.a libboost_program_options.a libbenchmark.a libada.a; do
+for lib in libboost_filesystem.a libboost_program_options.a libbenchmark.a libada.a libabsl_base.a; do
     [ -f "/usr/local/lib/$lib" ] || { echo "❌ Missing $lib"; exit 1; }
 done
 
 # 3. Check headers
-for header in glaze/glaze.hpp ada.h benchmark/benchmark.h; do
+for header in glaze/glaze.hpp ada.h benchmark/benchmark.h absl/base/config.h ankerl/unordered_dense.h; do
     [ -f "/usr/local/include/$header" ] || { echo "❌ Missing $header"; exit 1; }
 done
 

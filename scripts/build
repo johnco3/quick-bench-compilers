@@ -8,21 +8,36 @@
 # checks them in the UI.
 OPT_FLAGS="-march=native"
 
-$CXX $OPT_FLAGS "$@" bench-file.cpp -o bench \
-    -lada \
-    -lfmt \
-    -lboost_regex \
-    -lboost_filesystem \
-    -lboost_atomic \
-    -lbenchmark_main \
-    -lbenchmark \
-    -ljemalloc \
-    -lsnappy \
-    -lhiredis \
-    -luv \
-    -lyaml-cpp \
-    -lssl \
-    -lcrypto \
-    -lpthread \
-    -lrt \
+LINK_LIBS=(
+    -lada
+    -lbenchmark
+    -lbenchmark_main
+    -lboost_atomic
+    -lboost_filesystem
+    -lboost_regex
+    -lcrypto
+    -lfmt
+    -lhiredis
+    -ljemalloc
+    -lsnappy
+    -lssl
+    -luv
+    -lyaml-cpp
+)
+
+# Collect all installed Abseil static archives and link them as a group to
+# resolve cross-component archive dependencies without hand-maintaining flags.
+shopt -s nullglob
+ABSL_ARCHIVES=(/usr/local/lib/libabsl*.a)
+shopt -u nullglob
+if [ ${#ABSL_ARCHIVES[@]} -gt 0 ]; then
+    LINK_LIBS+=( -Wl,--start-group "${ABSL_ARCHIVES[@]}" -Wl,--end-group )
+fi
+
+LINK_LIBS+=(
+    -lpthread
+    -lrt
     -ldl
+)
+
+$CXX $OPT_FLAGS "$@" bench-file.cpp -o bench "${LINK_LIBS[@]}"
