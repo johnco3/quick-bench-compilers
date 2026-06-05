@@ -116,6 +116,7 @@ RUN git clone --depth 1 https://github.com/martinus/unordered_dense.git /tmp/uno
 RUN git clone --depth 1 https://github.com/stephenberry/glaze.git /tmp/glaze && \
     cp -r /tmp/glaze/include/glaze /usr/local/include/
 
+
 ############### Stage 2: Final Runtime ###############
 FROM ubuntu:25.10
 
@@ -126,7 +127,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
-    cmake ninja-build gdb vim jq \
+    cmake ninja-build gdb python3 vim jq \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
          ca-certificates curl procmail git rapidjson-dev \
        liblog4cplus-dev libspdlog-dev \
@@ -142,6 +143,19 @@ COPY --from=builder /usr/local/gcc-16 /usr/local/gcc-16
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
 COPY --from=builder /usr/local/bin/jemalloc-config /usr/local/bin/jemalloc-config
+
+# Configure GDB to load libstdc++ pretty-printers for the custom GCC toolchain
+RUN mkdir -p /etc/gdb \
+    && printf '%s\n' \
+       'set print pretty on' \
+       'set print object on' \
+       'set print elements 0' \
+       'python import sys' \
+       'python sys.path.insert(0, "/usr/local/gcc-16/share/gcc-16/python")' \
+       'python sys.path.insert(0, "/usr/share/gcc/python")' \
+       'python from libstdcxx.v6.printers import register_libstdcxx_printers' \
+       'python register_libstdcxx_printers(None)' \
+       > /etc/gdb/gdbinit
 
 # 4. Environment & Linker Configuration
 ENV PATH="/usr/local/gcc-16/bin:/usr/local/bin:${PATH}"
