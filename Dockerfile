@@ -55,7 +55,7 @@ RUN make install-strip \
 
 # 4. Static Library Builds
 # Keep pinned tarball builds before moving git HEAD clones to maximize cache reuse.
-# jemalloc (Pinned to latest stable release requested)
+# jemalloc (Pinned to latest stable release after a multi-year hiatus)
 ARG JEMALLOC_VERSION=5.3.1
 RUN wget https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSION}/jemalloc-${JEMALLOC_VERSION}.tar.bz2 && \
     tar -xf jemalloc-${JEMALLOC_VERSION}.tar.bz2 && \
@@ -65,22 +65,42 @@ RUN wget https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSI
     make install && \
     rm -rf /tmp/jemalloc-${JEMALLOC_VERSION} /tmp/jemalloc-${JEMALLOC_VERSION}.tar.bz2
 
-# Boost (using 1.87+ is recommended for GCC 16, but keeping your 1.91 request)
+# Boost 1.91.0 with selected static libs
 ARG BOOST_VERSION_UNDERSCORE=1_91_0
 RUN wget https://archives.boost.io/release/1.91.0/source/boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
     tar -xf boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2 && \
-    cd boost_${BOOST_VERSION_UNDERSCORE} && ./bootstrap.sh --prefix=/usr/local && \
-    ./b2 install --with-filesystem --with-regex --with-program_options \
-    toolset=gcc variant=release link=static threading=multi cxxflags="-fPIC"
+    cd boost_${BOOST_VERSION_UNDERSCORE} && \
+    ./bootstrap.sh --prefix=/usr/local --with-toolset=gcc && \
+    ./b2 install \
+      --with-filesystem \
+      --with-regex \
+      --with-program_options \
+      --with-iostreams \
+      --with-thread \
+      --with-chrono \
+      --with-date_time \
+      --with-atomic \
+      --layout=system \
+      --prefix=/usr/local \
+      --libdir=/usr/local/lib \
+      toolset=gcc \
+      variant=release \
+      link=static \
+      threading=multi \
+      cxxflags="-fPIC" && \
+    (find /usr/local/lib -type f -name "libboost_*.a" -exec strip --strip-debug {} \; || true) && \
+    find /usr/local/lib -maxdepth 1 -type f -name "libboost_*.a" | sort && \
+    cd .. && \
+    rm -rf boost_${BOOST_VERSION_UNDERSCORE} boost_${BOOST_VERSION_UNDERSCORE}.tar.bz2
 
-# Ada-URL
+# Ada-URL - latest greatest
 RUN git clone --depth 1 https://github.com/ada-url/ada.git /tmp/ada && \
     cmake -S /tmp/ada -B /tmp/ada/build -GNinja -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_SHARED_LIBS=OFF -DCMAKE_CXX_COMPILER=/usr/local/gcc-16/bin/g++-16 \
     -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_POSITION_INDEPENDENT_CODE=ON && \
     ninja -C /tmp/ada/build install
 
-# Google Benchmark
+# Google Benchmark - latest greatest
 RUN git clone --depth 1 https://github.com/google/benchmark.git /tmp/benchmark && \
     cmake -S /tmp/benchmark -B /tmp/benchmark/build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \

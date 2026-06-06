@@ -52,7 +52,7 @@ Use this only when you want cache reuse between machines (for example Windows ->
 First run (seed cache):
 
 ```bash
-docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --push .
+docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 -t johnco3/quick-bench:latest --cache-from type=registry,ref=johnco3/quick-bench:buildcache --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --load .
 ```
 
 Later runs (reuse + refresh cache):
