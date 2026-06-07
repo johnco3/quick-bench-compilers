@@ -8,7 +8,7 @@ Custom Dockerfiles and build scripts for Quick Bench compilers.
 
 The image bundles a set of commonly used third-party libraries in `/usr/local`, including:
 
-- Boost (filesystem, regex, program_options)
+- Boost (filesystem, regex, iostreams, chrono, threads, program_options, etc.)
 - jemalloc
 - Ada URL
 - Google Benchmark
@@ -58,7 +58,7 @@ docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfil
 Later runs (reuse + refresh cache):
 
 ```bash
-docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --cache-from type=registry,ref=johnco3/quick-bench:buildcache --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --push .
+docker buildx build --builder qb --platform linux/amd64,linux/arm64 -f Dockerfile -t johnco3/quick-bench:gcc-16.1 --cache-from type=registry,ref=johnco3/quick-bench:buildcache --cache-to type=registry,ref=johnco3/quick-bench:buildcache,mode=max --build-arg NPROC=16 --load .
 ```
 
 If the first run shows `ERROR importing cache manifest ... buildcache`, this is expected before cache is seeded. The build will still complete and seed cache via the `--cache-to` option.

@@ -147,7 +147,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get -y upgrade \
     && apt-get install -y --no-install-recommends \
-    cmake ninja-build gdb python3 vim jq \
+    cmake ninja-build gdb python3 vim jq ripgrep sudo \
        dpkg-dev binutils libc6-dev linux-libc-dev libuv1-dev libfmt-dev \
          ca-certificates curl procmail git rapidjson-dev \
        liblog4cplus-dev libspdlog-dev \
@@ -191,6 +191,9 @@ RUN ln -sf /usr/local/gcc-16/bin/gcc-16 /usr/local/bin/gcc && \
 
 # 5. User Setup
 RUN useradd -m -s /bin/bash builder
+RUN usermod -aG sudo builder \
+    && printf 'builder ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/builder \
+    && chmod 0440 /etc/sudoers.d/builder
 WORKDIR /home/builder
 
 # 6. Copy and assign permissions to scripts
