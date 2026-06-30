@@ -164,9 +164,16 @@ COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/local/include /usr/local/include
 COPY --from=builder /usr/local/bin/jemalloc-config /usr/local/bin/jemalloc-config
 
-# Configure GDB to load libstdc++ pretty-printers for the custom GCC toolchain
+# Configure GDB:
+# - Disable interactive debuginfod prompt. gdb >= 14.1 defaults debuginfod to
+#   "ask" for interactive sessions, but VS Code's cppdbg drives gdb through an
+#   MI pipe attached to a pty, so the prompt hangs the session forever.
+# - Permit auto-load of pretty-printer scripts shipped next to libstdc++.so.
+# - Load libstdc++ pretty-printers for the custom GCC toolchain.
 RUN mkdir -p /etc/gdb \
     && printf '%s\n' \
+       'set debuginfod enabled off' \
+       'set auto-load safe-path /' \
        'set print pretty on' \
        'set print object on' \
        'set print elements 0' \
